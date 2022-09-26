@@ -6,6 +6,7 @@
 #include <functional> 
 #include <time.h>
 #include <map>
+#include <numeric>
 using namespace std;
 
 double alpha = 0.97;
@@ -19,17 +20,18 @@ int highFreq = 3700;
 int origLength = 0;
 int numFrames = 0;
 double numCoef = 13;
+double lifterParam = 22;
 double frameDuration = round(1E-3*winLength*fs);
 double frameShift = round(1E-3 * shiftLength * fs);
-int n = floor(log(frameDuration) / log(2));
-int numFFT = pow(2, pow(2, n) > frameDuration ? n : n + 1);
-int k = floor(numFFT / 2) + 1;
+double n = floor(log(frameDuration) / log(2));
+double numFFT = pow(2, pow(2, n) > frameDuration ? n : n + 1);
+double k = floor(numFFT / 2) + 1;
 const double PI = 4 * atan(1.0);
 map<int, map<int, complex<double>> > omega;
 clock_t t1, t2;
 
 void ViewData(vector<double> arr) {
-	for (int i = arr.size()-1; i >arr.size()-10; i--) {
+	for (size_t i = arr.size()-1; i >arr.size()-10; i--) {
 		cout << arr[i] << endl;
 	}
 }
@@ -75,7 +77,8 @@ vector<vector<double>> matrixInverse(vector<vector<double>> m) {
 vector<double> SetAudioTo16Bits(vector<double> arr) {
 	double maxVal = 0;
 	double absArr = 0;
-	for (int i = 0; i < arr.size(); i++) {
+	int len = arr.size();
+	for (int i = 0; i < len; i++) {
 		absArr = abs(arr[i]);
 		if (absArr > maxVal)
 			maxVal = absArr;
@@ -86,8 +89,9 @@ vector<double> SetAudioTo16Bits(vector<double> arr) {
 }
 
 vector<double> hz2mel(vector<double> hz) {
-	vector<double> mel(hz.size(), 0);
-	for (int i = 0; i < hz.size(); i++) {
+	int hzSize = hz.size();
+	vector<double> mel(hzSize, 0);
+	for (int i = 0; i < hzSize; i++) {
 		mel[i] = 1127 * log(1 + hz[i] / 700);
 	}
 	return mel;
@@ -98,8 +102,9 @@ double hz2mel(double hz) {
 }
 
 vector<double> mel2hz(vector<double> mel) {
-	vector<double> hz(mel.size(), 0);
-	for (int i = 0; i < mel.size(); i++) {
+	int melSize = mel.size();
+	vector<double> hz(melSize, 0);
+	for (int i = 0; i < melSize; i++) {
 		hz[i] = 700 * exp(mel[i] / 1127) - 700;
 	}
 	return hz;
@@ -110,9 +115,10 @@ double mel2hz(double mel) {
 }
 
 vector<double> Preemphasize(vector<double> speech, double alpha) {
-	vector<double> newSpeech(speech.size(), 0);
+	int speechLen = speech.size();
+	vector<double> newSpeech(speechLen, 0);
 	newSpeech[0] = speech[0];
-	for (int i = 1; i < speech.size(); i++) {
+	for (int i = 1; i < speechLen; i++) {
 		newSpeech[i] = speech[i] - alpha * speech[i - 1];
 	}
 	return newSpeech;
@@ -140,7 +146,7 @@ void MappingOmega() {
 vector<complex<double>> FFT(vector<complex<double>> frame) {
 	const complex<double> J(0, 1);
 	complex<double> tempY;
-	int n = frame.size();
+	size_t n = frame.size();
 	vector<complex<double>> frame_even(n/2,0), frame_odd(n / 2, 0), y_odd, y;
 	if (n == 1)
 		return frame;
@@ -189,6 +195,8 @@ vector<vector<double>> trifbank() {
 
 int main()
 {
+
+	t1 = clock();
 	// Test
 	/*vector<vector<double>> m1{ {2,3,4},{1,5,7} };
 	vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
@@ -222,9 +230,9 @@ int main()
 	
 	// FFT
 	MappingOmega();
-	vector<vector<double>> Mag(numFFT, vector<double>(frame.size(), 0));
+	vector<vector<double>> Mag(numFFT, vector<double>(numFrames, 0));
 	vector<complex<double>> tempFrame;
-	for (int i = 0; i < frame.size(); i++) {
+	for (int i = 0; i < numFrames; i++) {
 		tempFrame.assign(frame[i].begin(), frame[i].end());
 		tempFrame.resize(numFFT);
 		tempFrame = FFT(tempFrame);
@@ -248,15 +256,23 @@ int main()
 		}
 	}
 	// Apply DCT
-	for (int i = 0; i < FBE.size(); i++)
-		for (int j = 0; j < FBE[0].size(); j++)
-			FBE[i][j] = log(FBE[i][j]);
+	for (int i = 0; i < numFilters; i++)
+		for (int j = 0; j < numFrames; j++)
+			FBE[i][j] = log(FBE[i][j]); // Take log for FBE
 	vector<vector<double>> CC = matrixMultiply(DCT, FBE);
 
-
-	/*t1 = clock();
+	// Create lifter computation
+	vector<double> lifter(numCoef, 0);
+	for (int i = 0; i < numCoef; i++)
+		lifter[i] = 1 + 0.5 * lifterParam * sin(PI * i / lifterParam);
+	
+	// Apply lifter
+	for (int i = 0; i < numCoef; i++)
+		for (int j = 0; j < numFrames; j++)
+			CC[i][j] *= lifter[i];
+	SaveAsCSV(CC, "CC.csv");
 	t2 = clock();
-	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));*/
+	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
 	system("pause");
 	return 0;
 }
