@@ -10,7 +10,7 @@ using namespace std;
 
 double alpha = 0.97;
 int numCepstra = 17;
-int numFilters = 20;
+double numFilters = 20;
 int fs = 48000;
 int winLength = 25;
 int shiftLength = 10;
@@ -18,6 +18,7 @@ int lowFreq = 300;
 int highFreq = 3700;
 int origLength = 0;
 int numFrames = 0;
+double numCoef = 13;
 double frameDuration = round(1E-3*winLength*fs);
 double frameShift = round(1E-3 * shiftLength * fs);
 int n = floor(log(frameDuration) / log(2));
@@ -25,6 +26,7 @@ int numFFT = pow(2, pow(2, n) > frameDuration ? n : n + 1);
 int k = floor(numFFT / 2) + 1;
 const double PI = 4 * atan(1.0);
 map<int, map<int, complex<double>> > omega;
+clock_t t1, t2;
 
 void ViewData(vector<double> arr) {
 	for (int i = arr.size()-1; i >arr.size()-10; i--) {
@@ -32,31 +34,41 @@ void ViewData(vector<double> arr) {
 	}
 }
 
-void SaveAsCSV(vector<double> arr, string fileName) {
+void SaveAsCSV(vector<vector<double>> arr, string fileName) {
 	std::ofstream out(fileName);
-	for (int k = 0; k < numFFT; k++) {
-		out << arr[k] << '\n';
+	for (int i = 0; i < arr.size(); i++) {
+		for (int k = 0; k < arr[0].size(); k++)
+			out << arr[i][k] << ',';
+		out << '\n';
 	}
+		
 }
 
 vector<vector<double>> matrixMultiply(vector<vector<double>> m1, vector<vector<double>> m2) {
-	//clock_t t1, t2;
-	//t1 = clock();
+	
 	int initSize = m1.size();
-	int midSize = m2[0].size();
-	int lastSize = m2.size();
+	int lastSize = m2[0].size();
+	int midSize = m1[0].size();
 	vector<vector<double>> result(initSize, vector<double>(lastSize, 0));
-	for (int k = 0; k < lastSize; k++) {
+	for (int k = 0; k < midSize; k++) {
 		for (int i = 0; i < initSize; i++) {
-			for (int j = 0; j < midSize; j++) {
+			for (int j = 0; j < lastSize; j++) {
 				if ((m1[i][k] == 0) || (m2[k][j] == 0))
 					continue;
 				result[i][j] += m1[i][k] * m2[k][j];
 			}
 		}
 	}
-	//t2 = clock();
-	//printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
+	return result;
+}
+
+vector<vector<double>> matrixInverse(vector<vector<double>> m) {
+	vector<vector<double>> result(m[0].size(), vector<double>(m.size(), 0));
+	for (int i = 0; i < m[0] .size(); i++) {
+		for (int j = 0; j < m.size(); j++) {
+			result[i][j] = m[j][i];
+		}
+	}
 	return result;
 }
 
@@ -149,16 +161,29 @@ vector<complex<double>> FFT(vector<complex<double>> frame) {
 }
 
 vector<vector<double>> trifbank() {
-	vector<vector<double>> H(k, vector<double>(numFFT, 0));
+	vector<vector<double>> H(numFilters, vector<double>(k, 0));
 	double fl = hz2mel(lowFreq);
 	double fh = hz2mel(highFreq);
 	vector<double> hzVec(numFilters + 2, 0);
 	for (int i = 0; i < numFilters + 2; i++) {
-		hzVec[i] = fh* i* ((fh - fl) / (numFilters + 1));
+		hzVec[i] = fl + i* ((fh - fl) / (numFilters + 1));
 	}
 	vector<double> c = mel2hz(hzVec);
 	vector<double> cw = hz2mel(c);
-
+	
+	vector<double> f(k,0);
+	for (int i = 1; i < k; i++)
+		f[i] = i*( (double(fs)/2)/ ((double)k - 1));
+	for (int i = 0; i < numFilters; i++) {
+		for (int j = 0; j < k; j++) {
+			// Up-slope
+			if ((f[j] >= c[i]) && (f[j] <= c[i + 1]))
+				H[i][j] = (f[j] - c[i]) / (c[i + 1] - c[i]);
+			// Down-slope
+			if ((f[j] >= c[i+1]) && (f[j] <= c[i + 2]))
+				H[i][j] = (c[i+2] - f[j]) / (c[i + 2] - c[i+1]);
+		}
+	}
 	return H;
 }
 
@@ -167,8 +192,7 @@ int main()
 	// Test
 	/*vector<vector<double>> m1{ {2,3,4},{1,5,7} };
 	vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
-	vector<vector<double>> m3;
-	m3 = matrixMultiply(m1, m2);*/
+	vector<vector<double>> m3 = matrixMultiply(m1,m2);*/
 
 	// Load data
 	ifstream filedata("Data.txt");
@@ -195,23 +219,44 @@ int main()
 	
 	// Framing and hamming
 	frame = vec2frame(sample);
-
+	
 	// FFT
 	MappingOmega();
-	vector<vector<double>> Mag(frame[0].size(), vector<double>(numFFT, 0));
+	vector<vector<double>> Mag(numFFT, vector<double>(frame.size(), 0));
 	vector<complex<double>> tempFrame;
-	for (int i = 0; i < frame[0].size(); i++) {
-		tempFrame.assign(frame[0].begin(), frame[0].end());
+	for (int i = 0; i < frame.size(); i++) {
+		tempFrame.assign(frame[i].begin(), frame[i].end());
 		tempFrame.resize(numFFT);
 		tempFrame = FFT(tempFrame);
-		for (int j = 0; j < numFFT; j++)
-			Mag[i][j] = abs(tempFrame[j]);
-		//SaveAsCSV(Mag[i], "test2.csv");
+		for (int j = 0; j < numFFT; j++) {
+			Mag[j][i] = abs(tempFrame[j]);
+		}
 	}
+	//SaveAsCSV(Mag, "test2.csv");
 
 	// Create filter bank
-	vector<vector<double>> H(numFilters);
-	H = trifbank();
+	vector<vector<double>> H = trifbank();
+
+	// Apply filter bank
+	vector<vector<double>> FBE = matrixMultiply(H, Mag);
+	
+	// Create DCT matrix
+	vector <vector<double>> DCT(numCoef, vector<double>(numFilters, 0));
+	for (int i = 0; i < numCoef; i++) {
+		for (int j = 0; j < numFilters; j++) {
+			DCT[i][j] = sqrt(2.0 / numFilters) * cos((double)i * (PI * (((double)j + 1) - 0.5) / numFilters));
+		}
+	}
+	// Apply DCT
+	for (int i = 0; i < FBE.size(); i++)
+		for (int j = 0; j < FBE[0].size(); j++)
+			FBE[i][j] = log(FBE[i][j]);
+	vector<vector<double>> CC = matrixMultiply(DCT, FBE);
+
+
+	/*t1 = clock();
+	t2 = clock();
+	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));*/
 	system("pause");
 	return 0;
 }
