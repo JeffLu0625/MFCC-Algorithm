@@ -193,14 +193,37 @@ vector<vector<double>> trifbank() {
 	return H;
 }
 
+double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
+	double error = 0;
+	if ((m1.size() == m2.size()) && (m1[0].size() != m2[0].size())) {
+		m1 = matrixInverse(m1);	
+		m2 = matrixInverse(m2);
+	}
+	vector<vector<double>> m12(m1.size(), vector<double>(m2.size(), 0));
+	vector<double> tempVec;
+	vector<double> neighbors;
+	// Compute error matrix
+	int iCount = 0;
+	for (int i = m1.size()-1; i > 0; i--) {
+		for (int j = 0; j < m2.size(); j++) {
+			tempVec.clear();
+			std::transform(m1[iCount].begin(), m1[iCount].end(), m2[j].begin(), std::back_inserter(tempVec),//
+				[](double element1, double element2) {return pow((element1 - element2), 2); });
+			tempVec.shrink_to_fit();
+			m12[i][j] = sqrt(std::accumulate(tempVec.begin(), tempVec.end(), 0));
+			// Add neighbors' condition
+		}
+		iCount += 1;
+	}
+	return error;
+}
 int main()
 {
-
-	t1 = clock();
+	//t1 = clock();
 	// Test
-	/*vector<vector<double>> m1{ {2,3,4},{1,5,7} };
+	vector<vector<double>> m1{ {2,3,4},{1,5,7},{8,4,9}};
 	vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
-	vector<vector<double>> m3 = matrixMultiply(m1,m2);*/
+	double error = DTW(m1,m2);
 
 	// Load data
 	ifstream filedata("Data.txt");
@@ -270,9 +293,11 @@ int main()
 	for (int i = 0; i < numCoef; i++)
 		for (int j = 0; j < numFrames; j++)
 			CC[i][j] *= lifter[i];
-	SaveAsCSV(CC, "CC.csv");
-	t2 = clock();
-	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
+
+
+	//SaveAsCSV(CC, "CC.csv");
+	//t2 = clock();
+	//printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
 	system("pause");
 	return 0;
 }
