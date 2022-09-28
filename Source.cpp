@@ -199,9 +199,16 @@ double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
 		m1 = matrixInverse(m1);	
 		m2 = matrixInverse(m2);
 	}
-	vector<vector<double>> m12(m1.size(), vector<double>(m2.size(), 0));
+	int m1Size = m1.size();
+	int m2Size = m2.size();
+	vector<vector<double>> m12(m1Size, vector<double>(m2Size, 0));
 	vector<double> tempVec;
-	vector<double> neighbors;
+	vector<double> neighbors{0,0,0};
+	// Compute largest error to be neighbor
+	std::transform(m1[m1Size-1].begin(), m1[m1Size - 1].end(), m2[m2Size-1].begin(), std::back_inserter(tempVec),//
+		[](double element1, double element2) {return pow((element1 - element2), 2); });
+	tempVec.shrink_to_fit();
+	int LargestErr = sqrt(std::accumulate(tempVec.begin(), tempVec.end(), 0));
 	// Compute error matrix
 	int iCount = 0;
 	for (int i = m1.size()-1; i > 0; i--) {
@@ -211,7 +218,14 @@ double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
 				[](double element1, double element2) {return pow((element1 - element2), 2); });
 			tempVec.shrink_to_fit();
 			m12[i][j] = sqrt(std::accumulate(tempVec.begin(), tempVec.end(), 0));
-			// Add neighbors' condition
+			fill(neighbors.begin(), neighbors.end(), LargestErr);
+			if (((iCount-1 >= 0) && (iCount - 1 < m1.size())) && ((j - 1 < 0) || (j - 1 >= m2.size())))
+				neighbors[2] = m12[i -1][j];
+			if (((iCount-1 < 0) || (iCount - 1 >= m1.size())) && ((j - 1 >= 0) && (j - 1 < m2.size())))
+				neighbors[0] = m12[i][j - 1];
+			if (((iCount-1 >= 0) && (iCount - 1 < m1.size())) && ((j - 1 >= 0) && (j - 1 < m2.size())))
+				neighbors[1] = m12[i - 1][j - 1];
+			m12[i][j] += *min_element(neighbors.begin(), neighbors.end());
 		}
 		iCount += 1;
 	}
