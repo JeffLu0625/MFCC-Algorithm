@@ -12,13 +12,13 @@ using namespace std;
 double alpha = 0.97;
 int numCepstra = 17;
 double numFilters = 20;
-int fs = 48000;
+double fs = 48000;
 int winLength = 25;
 int shiftLength = 10;
 int lowFreq = 300;
 int highFreq = 3700;
 int origLength = 0;
-int numFrames = 0;
+double numFrames = 0;
 double numCoef = 13;
 double lifterParam = 22;
 double frameDuration = round(1E-3*winLength*fs);
@@ -48,9 +48,9 @@ void SaveAsCSV(vector<vector<double>> arr, string fileName) {
 
 vector<vector<double>> matrixMultiply(vector<vector<double>> m1, vector<vector<double>> m2) {
 	
-	int initSize = m1.size();
-	int lastSize = m2[0].size();
-	int midSize = m1[0].size();
+	size_t initSize = m1.size();
+	size_t lastSize = m2[0].size();
+	size_t midSize = m1[0].size();
 	vector<vector<double>> result(initSize, vector<double>(lastSize, 0));
 	for (int k = 0; k < midSize; k++) {
 		for (int i = 0; i < initSize; i++) {
@@ -77,7 +77,7 @@ vector<vector<double>> matrixInverse(vector<vector<double>> m) {
 vector<double> SetAudioTo16Bits(vector<double> arr) {
 	double maxVal = 0;
 	double absArr = 0;
-	int len = arr.size();
+	size_t len = arr.size();
 	for (int i = 0; i < len; i++) {
 		absArr = abs(arr[i]);
 		if (absArr > maxVal)
@@ -89,7 +89,7 @@ vector<double> SetAudioTo16Bits(vector<double> arr) {
 }
 
 vector<double> hz2mel(vector<double> hz) {
-	int hzSize = hz.size();
+	size_t hzSize = hz.size();
 	vector<double> mel(hzSize, 0);
 	for (int i = 0; i < hzSize; i++) {
 		mel[i] = 1127 * log(1 + hz[i] / 700);
@@ -102,7 +102,7 @@ double hz2mel(double hz) {
 }
 
 vector<double> mel2hz(vector<double> mel) {
-	int melSize = mel.size();
+	size_t melSize = mel.size();
 	vector<double> hz(melSize, 0);
 	for (int i = 0; i < melSize; i++) {
 		hz[i] = 700 * exp(mel[i] / 1127) - 700;
@@ -115,11 +115,11 @@ double mel2hz(double mel) {
 }
 
 vector<double> Preemphasize(vector<double> speech, double alpha) {
-	int speechLen = speech.size();
+	size_t speechLen = speech.size();
 	vector<double> newSpeech(speechLen, 0);
 	newSpeech[0] = speech[0];
 	for (int i = 1; i < speechLen; i++) {
-		newSpeech[i] = speech[i] - alpha * speech[i - 1];
+		newSpeech[i] = speech[i] - alpha * speech[(double)i - 1];
 	}
 	return newSpeech;
 }
@@ -146,7 +146,7 @@ void MappingOmega() {
 vector<complex<double>> FFT(vector<complex<double>> frame) {
 	const complex<double> J(0, 1);
 	complex<double> tempY;
-	size_t n = frame.size();
+	int n = frame.size();
 	vector<complex<double>> frame_even(n/2,0), frame_odd(n / 2, 0), y_odd, y;
 	if (n == 1)
 		return frame;
@@ -160,8 +160,8 @@ vector<complex<double>> FFT(vector<complex<double>> frame) {
 	y.insert(y.end(), y_odd.begin(), y_odd.end());
 	for (int i = 0; i < n / 2-1; i++) {
 		tempY = y[i];
-		y[i] = tempY + omega[n][i] * y[i+n/2];
-		y[i + n / 2] = tempY - omega[n][i] * y[i+n/2];
+		y[i] = tempY + omega[n][i] * y[(double)i+n/2];
+		y[(double)i + n / 2] = tempY - omega[n][i] * y[(double)i+n/2];
 	}
 	return y;
 }
@@ -179,9 +179,9 @@ vector<vector<double>> trifbank() {
 	
 	vector<double> f(k,0);
 	for (int i = 1; i < k; i++)
-		f[i] = i*( (double(fs)/2)/ ((double)k - 1));
-	for (int i = 0; i < numFilters; i++) {
-		for (int j = 0; j < k; j++) {
+		f[i] = i*( (fs/2)/ (k - 1));
+	for (size_t i = 0; i < numFilters; i++) {
+		for (size_t j = 0; j < k; j++) {
 			// Up-slope
 			if ((f[j] >= c[i]) && (f[j] <= c[i + 1]))
 				H[i][j] = (f[j] - c[i]) / (c[i + 1] - c[i]);
@@ -199,38 +199,53 @@ double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
 		m1 = matrixInverse(m1);	
 		m2 = matrixInverse(m2);
 	}
-	int m1Size = m1.size();
-	int m2Size = m2.size();
+	double m1Size = m1.size();
+	double m2Size = m2.size();
 	vector<vector<double>> m12(m1Size, vector<double>(m2Size, 0));
 	vector<double> tempVec;
 	vector<double> neighbors{0,0,0};
 	// Compute largest error to be neighbor
-	std::transform(m1[m1Size-1].begin(), m1[m1Size - 1].end(), m2[m2Size-1].begin(), std::back_inserter(tempVec),//
-		[](double element1, double element2) {return pow((element1 - element2), 2); });
-	tempVec.shrink_to_fit();
-	int LargestErr = sqrt(std::accumulate(tempVec.begin(), tempVec.end(), 0));
+	int LargestErr = 100;
 	// Compute error matrix
-	int iCount = 0;
-	for (int i = m1.size()-1; i > 0; i--) {
-		for (int j = 0; j < m2.size(); j++) {
+	double iCount = 0;
+	for (int i = m1Size -1; i >= 0; i--) {
+		for (int j = 0; j < m2Size; j++) {
 			tempVec.clear();
 			std::transform(m1[iCount].begin(), m1[iCount].end(), m2[j].begin(), std::back_inserter(tempVec),//
 				[](double element1, double element2) {return pow((element1 - element2), 2); });
 			tempVec.shrink_to_fit();
 			m12[i][j] = sqrt(std::accumulate(tempVec.begin(), tempVec.end(), 0));
 			fill(neighbors.begin(), neighbors.end(), LargestErr);
-			if (((iCount-1 >= 0) && (iCount - 1 < m1.size())) && ((j - 1 < 0) || (j - 1 >= m2.size())))
-				neighbors[2] = m12[i -1][j];
-			if (((iCount-1 < 0) || (iCount - 1 >= m1.size())) && ((j - 1 >= 0) && (j - 1 < m2.size())))
-				neighbors[0] = m12[i][j - 1];
-			if (((iCount-1 >= 0) && (iCount - 1 < m1.size())) && ((j - 1 >= 0) && (j - 1 < m2.size())))
-				neighbors[1] = m12[i - 1][j - 1];
-			m12[i][j] += *min_element(neighbors.begin(), neighbors.end());
+			if ((iCount-1 >= 0) && (iCount - 1 < m1Size))
+				neighbors[2] = m12[(double)i + 1][j];
+			if ((j - 1 >= 0) && ((double)j - 1 < m2Size))
+				neighbors[0] = m12[i][(double)j - 1];
+			if (((iCount-1 >= 0) && (iCount - 1 < m1Size)) && ((j - 1 >= 0) && ((double)j - 1 < m2Size)))
+				neighbors[1] = m12[(double)i + 1][(double)j - 1];
+			if ((iCount != 0) || (j != 0))
+				m12[i][j] += *min_element(neighbors.begin(), neighbors.end());
 		}
 		iCount += 1;
 	}
+	error = m12[0][m2Size - 1];
 	return error;
 }
+
+void LoadTemplates(char* fileName) {
+	ifstream filedata(fileName);
+	string line;
+	int lineCount = 1;
+	if (filedata.is_open()) {
+		while(getline(filedata, line))
+			switch (lineCount){
+				case 1:
+
+
+			}
+
+	}
+}
+
 int main()
 {
 	//t1 = clock();
@@ -287,9 +302,9 @@ int main()
 	
 	// Create DCT matrix
 	vector <vector<double>> DCT(numCoef, vector<double>(numFilters, 0));
-	for (int i = 0; i < numCoef; i++) {
-		for (int j = 0; j < numFilters; j++) {
-			DCT[i][j] = sqrt(2.0 / numFilters) * cos((double)i * (PI * (((double)j + 1) - 0.5) / numFilters));
+	for (size_t i = 0; i < numCoef; i++) {
+		for (size_t j = 0; j < numFilters; j++) {
+			DCT[i][j] = sqrt(2.0 / numFilters) * cos(i * (PI * ((j + 1) - 0.5) / numFilters));
 		}
 	}
 	// Apply DCT
@@ -308,10 +323,13 @@ int main()
 		for (int j = 0; j < numFrames; j++)
 			CC[i][j] *= lifter[i];
 
+	// Load template
 
+	// DTW
+	
 	//SaveAsCSV(CC, "CC.csv");
-	//t2 = clock();
-	//printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
+	t2 = clock();
+	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
 	system("pause");
 	return 0;
 }
