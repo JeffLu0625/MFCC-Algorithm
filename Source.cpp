@@ -18,6 +18,8 @@ int shiftLength = 10;
 int lowFreq = 300;
 int highFreq = 3700;
 int origLength = 0;
+int numTemplates = 0;
+int numClass = 6;
 double numFrames = 0;
 double numCoef = 13;
 double lifterParam = 22;
@@ -27,6 +29,7 @@ double n = floor(log(frameDuration) / log(2));
 double numFFT = pow(2, pow(2, n) > frameDuration ? n : n + 1);
 double k = floor(numFFT / 2) + 1;
 const double PI = 4 * atan(1.0);
+vector<vector<vector<double>>> Templates;
 map<int, map<int, complex<double>> > omega;
 clock_t t1, t2;
 
@@ -43,7 +46,15 @@ void SaveAsCSV(vector<vector<double>> arr, string fileName) {
 			out << arr[i][k] << ',';
 		out << '\n';
 	}
-		
+}
+
+void ConvertCharToArray(const std::string array, vector<double>& OutputVertices) {
+	std::istringstream ss(array);
+	std::copy(
+		std::istream_iterator <double>(ss),
+		std::istream_iterator <double>(),
+		back_inserter(OutputVertices)
+	);
 }
 
 vector<vector<double>> matrixMultiply(vector<vector<double>> m1, vector<vector<double>> m2) {
@@ -205,23 +216,23 @@ double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
 	vector<double> tempVec;
 	vector<double> neighbors{0,0,0};
 	// Compute largest error to be neighbor
-	int LargestErr = 100;
+	int LargestErr = 4096;
 	// Compute error matrix
 	double iCount = 0;
 	for (int i = m1Size -1; i >= 0; i--) {
 		for (int j = 0; j < m2Size; j++) {
 			tempVec.clear();
-			std::transform(m1[iCount].begin(), m1[iCount].end(), m2[j].begin(), std::back_inserter(tempVec),//
+			std::transform(m1[iCount].begin(), m1[iCount].end(), m2[j].begin(), std::back_inserter(tempVec),
 				[](double element1, double element2) {return pow((element1 - element2), 2); });
 			tempVec.shrink_to_fit();
-			m12[i][j] = sqrt(std::accumulate(tempVec.begin(), tempVec.end(), 0));
+			m12[i][j] = sqrt(accumulate(tempVec.begin(), tempVec.end(), 0.0));
 			fill(neighbors.begin(), neighbors.end(), LargestErr);
 			if ((iCount-1 >= 0) && (iCount - 1 < m1Size))
-				neighbors[2] = m12[(double)i + 1][j];
-			if ((j - 1 >= 0) && ((double)j - 1 < m2Size))
-				neighbors[0] = m12[i][(double)j - 1];
-			if (((iCount-1 >= 0) && (iCount - 1 < m1Size)) && ((j - 1 >= 0) && ((double)j - 1 < m2Size)))
-				neighbors[1] = m12[(double)i + 1][(double)j - 1];
+				neighbors[2] = m12[i + 1][j];
+			if ((j - 1 >= 0) && (j - 1 < m2Size))
+				neighbors[0] = m12[i][j - 1];
+			if (((iCount-1 >= 0) && (iCount - 1 < m1Size)) && ((j - 1 >= 0) && (j - 1 < m2Size)))
+				neighbors[1] = m12[i + 1][j - 1];
 			if ((iCount != 0) || (j != 0))
 				m12[i][j] += *min_element(neighbors.begin(), neighbors.end());
 		}
@@ -234,25 +245,44 @@ double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
 void LoadTemplates(char* fileName) {
 	ifstream filedata(fileName);
 	string line;
+	vector<double> numFrames, tempTemplate;
+	vector<vector<double>> temp2DTemplate(numCoef, vector<double>());
 	int lineCount = 1;
 	if (filedata.is_open()) {
-		while(getline(filedata, line))
-			switch (lineCount){
-				case 1:
-
-
+		while (getline(filedata, line)) {
+			switch (lineCount) {
+			case 1:
+				numTemplates = stoi(line);
+				break;
+			case 2:
+				ConvertCharToArray(line, numFrames);
+				break;
+			default:
+				tempTemplate.clear();
+				ConvertCharToArray(line, tempTemplate);
+				for (int i = 0; i < numCoef; i++) {
+					temp2DTemplate[i].assign(tempTemplate.begin() + i * numFrames[lineCount - 3],
+						tempTemplate.begin() + (i + 1) * numFrames[lineCount - 3]);
+				}
+				Templates.push_back(temp2DTemplate);
+				break;
 			}
-
+			lineCount += 1;
+		}
 	}
 }
 
 int main()
 {
-	//t1 = clock();
+	t1 = clock();
 	// Test
-	vector<vector<double>> m1{ {2,3,4},{1,5,7},{8,4,9}};
-	vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
-	double error = DTW(m1,m2);
+	//vector<vector<double>> m1{ {2,3,4},{1,5,7},{8,4,9}};
+	//vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
+	//double error = DTW(m1,m2);
+
+	// Load templates
+	char filename[] = "MFCC_Templates.txt";
+	LoadTemplates(filename);
 
 	// Load data
 	ifstream filedata("Data.txt");
@@ -272,6 +302,7 @@ int main()
 		}
 	}
 
+	// Preprocess
 	sample = SetAudioTo16Bits(sample);
 
 	// Preemphasize
@@ -314,19 +345,41 @@ int main()
 	vector<vector<double>> CC = matrixMultiply(DCT, FBE);
 
 	// Create lifter computation
-	vector<double> lifter(numCoef, 0);
+	/*vector<double> lifter(numCoef, 0);
 	for (int i = 0; i < numCoef; i++)
-		lifter[i] = 1 + 0.5 * lifterParam * sin(PI * i / lifterParam);
+		lifter[i] = 1 + 0.5 * lifterParam * sin(PI * i / lifterParam);*/
 	
-	// Apply lifter
-	for (int i = 0; i < numCoef; i++)
-		for (int j = 0; j < numFrames; j++)
-			CC[i][j] *= lifter[i];
-
-	// Load template
+	// Apply lifter computation
+	for (int i = 0; i < numCoef; i++) {
+		for (int j = 0; j < numFrames; j++) {
+			CC[i][j] *= 1 + 0.5 * lifterParam * sin(PI * i / lifterParam);
+		}
+	}
+	
+	// Cepstral mean and variance normalization
+	vector<double> mean(numCoef, 0);
+	vector<double> std(numCoef, 0);
+	for (int i = 0; i < numCoef; i++) {
+		mean[i] = accumulate(CC[i].begin(), CC[i].end(), 0.0) / numFrames;
+		for (int j = 0; j < numFrames; j++) {
+			std[i] += pow(CC[i][j] - mean[i], 2);
+		}
+		std[i] = sqrt(std[i] / (numFrames - 1));
+	}
+	for (int i = 0; i < numCoef; i++) {
+		transform(CC[i].begin(), CC[i].end(), CC[i].begin(), bind(minus<double>(), placeholders::_1, mean[i]));
+		transform(CC[i].begin(), CC[i].end(), CC[i].begin(), bind(divides<double>(), placeholders::_1, std[i]));
+	}
 
 	// DTW
+	vector<double> ErrorVec(numClass, 0);
+	for (int i = 0; i < numClass; i++) {
+		for (int j = 0; j < numTemplates; j++) {
+			ErrorVec[i] += DTW(Templates[i*numTemplates+j], CC);
+		}
+	}
 	
+
 	//SaveAsCSV(CC, "CC.csv");
 	t2 = clock();
 	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
