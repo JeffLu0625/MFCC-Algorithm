@@ -66,8 +66,6 @@ vector<vector<double>> matrixMultiply(vector<vector<double>> m1, vector<vector<d
 	for (int k = 0; k < midSize; k++) {
 		for (int i = 0; i < initSize; i++) {
 			for (int j = 0; j < lastSize; j++) {
-				if ((m1[i][k] == 0) || (m2[k][j] == 0))
-					continue;
 				result[i][j] += m1[i][k] * m2[k][j];
 			}
 		}
@@ -206,36 +204,41 @@ vector<vector<double>> trifbank() {
 
 double DTW(vector<vector<double>> m1, vector<vector<double>> m2) {
 	double error = 0;
-	if ((m1.size() == m2.size()) && (m1[0].size() != m2[0].size())) {
+	if (m1[0].size() != numCoef)
 		m1 = matrixInverse(m1);	
+	if (m2[0].size() != numCoef)
 		m2 = matrixInverse(m2);
-	}
 	double m1Size = m1.size();
 	double m2Size = m2.size();
-	vector<vector<double>> m12(m1Size, vector<double>(m2Size, 0));
+	double weight = round(0.3 * min(m1Size, m2Size));
+	int LargestErr = 8192;
+	vector<vector<double>> m12(m1Size, vector<double>(m2Size, LargestErr));
 	vector<double> tempVec;
 	vector<double> neighbors{0,0,0};
-	// Compute largest error to be neighbor
-	int LargestErr = 4096;
+
 	// Compute error matrix
 	double iCount = 0;
-	for (int i = m1Size -1; i >= 0; i--) {
-		for (int j = 0; j < m2Size; j++) {
-			tempVec.clear();
-			std::transform(m1[iCount].begin(), m1[iCount].end(), m2[j].begin(), std::back_inserter(tempVec),
-				[](double element1, double element2) {return pow((element1 - element2), 2); });
-			tempVec.shrink_to_fit();
-			m12[i][j] = sqrt(accumulate(tempVec.begin(), tempVec.end(), 0.0));
-			fill(neighbors.begin(), neighbors.end(), LargestErr);
-			if ((iCount-1 >= 0) && (iCount - 1 < m1Size))
-				neighbors[2] = m12[i + 1][j];
-			if ((j - 1 >= 0) && (j - 1 < m2Size))
-				neighbors[0] = m12[i][j - 1];
-			if (((iCount-1 >= 0) && (iCount - 1 < m1Size)) && ((j - 1 >= 0) && (j - 1 < m2Size)))
-				neighbors[1] = m12[i + 1][j - 1];
-			if ((iCount != 0) || (j != 0))
-				m12[i][j] += *min_element(neighbors.begin(), neighbors.end());
-		}
+	double i = 0;
+	double j = 0;
+	for (i = m1Size -1; i >= 0; i--) {
+			for (j = 0; j < m2Size; j++) {
+				if (abs(iCount - j) <= weight) {
+					tempVec.clear();
+					std::transform(m1[iCount].begin(), m1[iCount].end(), m2[j].begin(), std::back_inserter(tempVec),
+						[](double element1, double element2) {return pow((element1 - element2), 2); });
+					tempVec.shrink_to_fit();
+					m12[i][j] = sqrt(accumulate(tempVec.begin(), tempVec.end(), 0.0));
+					fill(neighbors.begin(), neighbors.end(), LargestErr);
+					if ((iCount - 1 >= 0) && (iCount - 1 < m1Size))
+						neighbors[2] = m12[i + 1][j];
+					if ((j - 1 >= 0) && (j - 1 < m2Size))
+						neighbors[0] = m12[i][j - 1];
+					if (((iCount - 1 >= 0) && (iCount - 1 < m1Size)) && ((j - 1 >= 0) && (j - 1 < m2Size)))
+						neighbors[1] = m12[i + 1][j - 1];
+					if ((iCount != 0) || (j != 0))
+						m12[i][j] += *min_element(neighbors.begin(), neighbors.end());
+				}
+			}
 		iCount += 1;
 	}
 	error = m12[0][m2Size - 1];
@@ -276,9 +279,9 @@ int main()
 {
 	t1 = clock();
 	// Test
-	//vector<vector<double>> m1{ {2,3,4},{1,5,7},{8,4,9}};
-	//vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
-	//double error = DTW(m1,m2);
+	/*vector<vector<double>> m1{ {2,3,4},{1,5,7},{8,4,9}};
+	vector<vector<double>> m2{ {1,6},{8,2},{9,4} };
+	double error = DTW(m1,m2);*/
 
 	// Load templates
 	char filename[] = "MFCC_Templates.txt";
@@ -301,7 +304,7 @@ int main()
 			origLength++;
 		}
 	}
-
+	
 	// Preprocess
 	sample = SetAudioTo16Bits(sample);
 
@@ -344,11 +347,6 @@ int main()
 			FBE[i][j] = log(FBE[i][j]); // Take log for FBE
 	vector<vector<double>> CC = matrixMultiply(DCT, FBE);
 
-	// Create lifter computation
-	/*vector<double> lifter(numCoef, 0);
-	for (int i = 0; i < numCoef; i++)
-		lifter[i] = 1 + 0.5 * lifterParam * sin(PI * i / lifterParam);*/
-	
 	// Apply lifter computation
 	for (int i = 0; i < numCoef; i++) {
 		for (int j = 0; j < numFrames; j++) {
