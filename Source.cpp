@@ -34,7 +34,13 @@ vector<double> Templates1D;
 vector<double> templateFrames;
 map<int, map<int, complex<double>> > omega;
 clock_t t1, t2;
-
+map<int, string> labels = {
+			{1, "´Ó¤ú"},
+			{2, "´Ý®Ú"},
+			{3, "¤ú«a"},
+			{4, "¯Ê¤ú"},
+			{5, "ªý¥Í¾¦"},
+};
 void ViewData(vector<double> arr) {
 	for (size_t i = arr.size()-1; i >arr.size()-10; i--) {
 		cout << arr[i] << endl;
@@ -180,11 +186,6 @@ vector<vector<double>> vec2frame(vector<double> vec) {
 			frame[i][j] = vec[i* frameShift+j] * (0.54 - 0.46 * cos(2 * PI * j / (frameDuration - 1)));
 		}
 	}
-	/*cout << frame[1][0] << "\t" << frame1D[1200] << endl;
-	cout << frame[1][1] << "\t" << frame1D[1201] << endl;
-	cout << frame[1][2] << "\t" << frame1D[1202] << endl;
-	cout << frame[1][3] << "\t" << frame1D[1203] << endl;
-	cout << frame[1][4] << "\t" << frame1D[1204] << endl;*/
 	return frame;
 }
 
@@ -487,6 +488,7 @@ int main()
 	vector<complex<double>> a;
 	string temp, all;
 	double tempVal;
+	int minIdx;
 	if (filedata.is_open())
 	{
 		getline(filedata, all);
@@ -497,14 +499,13 @@ int main()
 			origLength++;
 		}
 	}
-	t1 = clock();
 	// Load templates
 	char filename[] = "MFCC_Templates.txt";
 	/*if (is1D)
 		LoadTemplates1D(filename);
 	else*/
 		LoadTemplates(filename);
-
+	t1 = clock();
 	// Preprocess
 	sample = SetAudioTo16Bits(sample);
 
@@ -573,6 +574,8 @@ int main()
 			}
 			cout << ErrorVec1D[i] << endl;
 		}
+		// Print result
+		minIdx = distance(begin(ErrorVec1D), min_element(begin(ErrorVec1D), end(ErrorVec1D)));
 	}
 	else {
 		// 2D vector
@@ -639,13 +642,14 @@ int main()
 			for (int j = 0; j < numTemplates; j++) {
 				ErrorVec[i] += DTW(Templates[i * numTemplates + j], CC);
 			}
-			cout << ErrorVec[i] << endl;
+			//cout << ErrorVec[i] << endl;
 		}
+		minIdx = std::distance(std::begin(ErrorVec), std::min_element(std::begin(ErrorVec), std::end(ErrorVec)));
 	}
-	
 	//SaveAsCSV(CC, "CC.csv");
 	t2 = clock();
-	printf("%lf\n", (t2 - t1) / (double)(CLOCKS_PER_SEC));
+	// Print result
+	printf("Result: %s, processed time: %lf seconds\n", labels[minIdx+1], (t2 - t1) / (double)(CLOCKS_PER_SEC));
 	system("pause");
 	return 0;
 }
